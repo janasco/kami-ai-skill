@@ -1,4 +1,5 @@
 // Client-side helpers for uploaded captures.
+import type { UploadedAsset } from "./types";
 
 /** Short djb2-style hash — enough to dedupe identical uploads. */
 export function shortHash(buf: ArrayBuffer, name: string): string {
@@ -42,4 +43,21 @@ export function drawFitted(
 
 export function assetUrl(file: string): string {
   return "/" + file.replace(/^public\//, "");
+}
+
+/** Upload a capture to /api/upload and return the registered asset. */
+export async function uploadCapture(file: File): Promise<UploadedAsset | null> {
+  try {
+    const { buf, w, h } = await probeImage(file);
+    const fd = new FormData();
+    fd.append("file", new Blob([buf], { type: file.type }), file.name);
+    fd.append("width", String(w));
+    fd.append("height", String(h));
+    const res = await fetch("/api/upload", { method: "POST", body: fd });
+    if (!res.ok) return null;
+    const uploaded = (await res.json()) as UploadedAsset;
+    return { ...uploaded, width: w, height: h, label: file.name };
+  } catch {
+    return null;
+  }
 }
