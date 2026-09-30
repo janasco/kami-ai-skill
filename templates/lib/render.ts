@@ -27,8 +27,11 @@ export function paintBackground(ctx: CanvasRenderingContext2D, theme: Theme, w: 
   }
   if (bg.type === "radial") {
     const g = ctx.createRadialGradient(w / 2, h * 0.32, 0, w / 2, h * 0.32, Math.max(w, h) * 0.75);
-    g.addColorStop(0, from);
-    g.addColorStop(1, to);
+    if (bg.stops && bg.stops.length > 1) bg.stops.forEach((s) => g.addColorStop(s.at, s.color));
+    else {
+      g.addColorStop(0, from);
+      g.addColorStop(1, to);
+    }
     ctx.fillStyle = g;
   } else {
     // CSS angle convention: 0deg = to top, 90deg = to right, 180deg = to bottom
@@ -39,8 +42,11 @@ export function paintBackground(ctx: CanvasRenderingContext2D, theme: Theme, w: 
     const cy = h / 2;
     const len = (Math.abs(w * dx) + Math.abs(h * dy)) / 2;
     const g = ctx.createLinearGradient(cx - dx * len, cy - dy * len, cx + dx * len, cy + dy * len);
-    g.addColorStop(0, from);
-    g.addColorStop(1, to);
+    if (bg.stops && bg.stops.length > 1) bg.stops.forEach((s) => g.addColorStop(s.at, s.color));
+    else {
+      g.addColorStop(0, from);
+      g.addColorStop(1, to);
+    }
     ctx.fillStyle = g;
   }
   ctx.fillRect(0, 0, w, h);
