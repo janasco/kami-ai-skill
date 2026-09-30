@@ -39,10 +39,13 @@ export interface DeckSeed {
   caption: string;
 }
 
-/** A ready-to-edit starter screen: headline + caption + centered device. */
-export function starterScreen(deck: Deck, seed: DeckSeed): Screen {
+/** A ready-to-edit starter screen: headline + caption + centered device.
+ *  Elements use strip coordinates: screenIndex offsets x so the screen's
+ *  content lands on its own panel of the connected strip. */
+export function starterScreen(deck: Deck, seed: DeckSeed, screenIndex = 0): Screen {
   const { w: cw, h: ch } = canvasSize(deck.deviceId, deck.orientation);
   const margin = safeMargin(cw);
+  const off = screenIndex * cw;
   const device = getDevice(deck.deviceId);
   const frameless = device.frame.kind === "none"; // feature graphic / wear
   let frameW = frameless ? cw - margin * 2 : Math.round(cw * 0.62);
@@ -53,12 +56,12 @@ export function starterScreen(deck: Deck, seed: DeckSeed): Screen {
     frameW = Math.round(maxH / 2.05);
   }
   const els: ScreenElement[] = [
-    makeTextElement("headline", seed.headline, margin, margin + Math.round(cw * 0.05), cw, "#inherit"),
-    makeTextElement("caption", seed.caption, margin, margin + Math.round(cw * 0.19), cw, "#inherit"),
+    makeTextElement("headline", seed.headline, margin + off, margin + Math.round(cw * 0.05), cw, "#inherit"),
+    makeTextElement("caption", seed.caption, margin + off, margin + Math.round(cw * 0.19), cw, "#inherit"),
     {
       id: newId("device"),
       kind: "device",
-      x: frameless ? margin : Math.round((cw - frameW) / 2),
+      x: (frameless ? margin : Math.round((cw - frameW) / 2)) + off,
       y: frameless ? margin : Math.round(cw * 0.3),
       w: frameW,
       h: frameH,
@@ -86,7 +89,9 @@ export function makeDeck(
     styleId,
     screens: [],
   };
-  deck.screens = seeds.length ? seeds.map((s) => starterScreen(deck, s)) : [starterScreen(deck, { headline: "Your first headline", caption: "Say the benefit, not the feature." })];
+  deck.screens = seeds.length
+    ? seeds.map((s, i) => starterScreen(deck, s, i))
+    : [starterScreen(deck, { headline: "Your first headline", caption: "Say the benefit, not the feature." }, 0)];
   return deck;
 }
 

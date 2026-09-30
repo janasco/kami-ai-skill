@@ -1,15 +1,49 @@
 import type { ProjectState } from "./types";
+import { canvasSize } from "./devices";
 
 // Add a MIGRATION entry whenever lib/types.ts changes shape. Each step
 // receives the previous version's state and mutates toward the next version.
 
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 type Migration = (state: Record<string, unknown>) => void;
 
+/**
+ * v1 → v2: elements moved to strip coordinates. Early v1 files stored
+ * screen-local x/y; screens after the first rendered empty. If every
+ * element of a screen sits inside the FIRST panel's range, it was never
+ * re-anchored — shift it to the screen's own panel.
+ */
+const migrateV1toV2: Migration = (state) => {
+  const decks = (state.decks as Array<Record<string, unknown>> | undefined) ?? [];
+  for (const deck of decks) {
+    const deviceId = String(deck.deviceId ?? "iphone-69");
+    const orientation = deck.orientation === "landscape" ? "landscape" : "portrait";
+    let cw: number;
+    try {
+      cw = canvasSize(deviceId, orientation).w;
+    } catch {
+      continue; // unknown device id — leave untouched
+    }
+    const screens = (deck.screens as Array<Record<string, unknown>> | undefined) ?? [];
+    screens.forEach((screen, index) => {
+      if (index === 0) return; // panel 0 coincides with local coords
+      const elements = screen.elements as Array<Record<string, unknown>> | undefined;
+      if (!Array.isArray(elements) || elements.length === 0) return;
+      const allInFirstPanel = elements.every((el) => {
+        const x = typeof el.x === "number" ? el.x : 0;
+        return x >= 0 && x < cw;
+      });
+      if (!allInFirstPanel) return;
+      for (const el of elements) {
+        if (typeof el.x === "number") el.x = el.x + index * cw;
+      }
+    });
+  }
+};
+
 const MIGRATIONS: Record<number, Migration> = {
-  // 1 → 2 (example): add per-screen notes when it first shipped
-  // 2: (s) => { for (const d of s.decks as any[]) for (const sc of d.screens) sc.notes ??= ""; },
+  1: migrateV1toV2,
 };
 
 /**
