@@ -72,7 +72,7 @@ Everything lives in **`app-store-screenshots.json`** at the project root:
   slide. 3–6 screens is the sweet spot (10 is the App Store max).
 - Use the **Copy ideas** library (`references/headlines.md`) — proven formula
   patterns the agent can drop in and adapt per feature.
-- Choose from **18 named styles** (`references/styles.md`), each with deep
+- Choose from **26 named styles** (`references/styles.md`), each with deep
   specs (palette, type ramp, motif, gradient stops). Default to a style whose
   palette matches the user's app icon; pick the rest of the palette from it.
 - **Connected canvas**: elements may span screen boundaries; export crops each

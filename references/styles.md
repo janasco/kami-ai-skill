@@ -1,4 +1,8 @@
-# Visual styles — 18 named presets
+# Visual styles — 26 named presets
+
+18 core presets plus the premium set (Lavender Dream, Peachy Cream, Electric
+Lime, Deep Plum, Steel Mono, Sunset Fade, Arctic Mint, Charcoal Copper) with
+multi-stop gradients. The premium set is at the end of `lib/themes.ts`.
 
 Each style is a complete spec: background (solid or gradient stops), text
 colors, accent, type ramp, and motif. One toolbar preset per style lives in

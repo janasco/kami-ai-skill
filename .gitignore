@@ -5,5 +5,12 @@ node_modules/
 # scratch installs used to verify the template
 /templates-check/
 
+# local dev server + typecheck sandboxes, not part of the skill
+/studio-local/
+/studio-check/
+
+# stray scratch copies of docs
+/styles.md
+
 # editor workspace config, not part of the skill
 .free*/
