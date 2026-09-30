@@ -1,0 +1,9 @@
+node_modules/
+.next/
+*.tsbuildinfo
+.DS_Store
+# scratch installs used to verify the template
+/templates-check/
+
+# editor workspace config, not part of the skill
+.free*/

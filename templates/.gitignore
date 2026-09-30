@@ -1,0 +1,16 @@
+# deps
+node_modules/
+
+# next
+.next/
+out/
+next-env.d.ts
+
+# misc
+*.tsbuildinfo
+.DS_Store
+
+# uploaded source captures are project assets; keep them tracked unless the
+# user prefers otherwise — uncomment to ignore:
+# public/screenshots/uploaded/*
+# !public/screenshots/uploaded/.gitkeep
