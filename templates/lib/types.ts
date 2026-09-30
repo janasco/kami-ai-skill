@@ -12,8 +12,8 @@ export type EditorMode = "connected" | "isolated";
 export interface ScreenElement {
   id: string;
   kind: "device" | "text" | "shape" | "image";
-  /** text kind: kicker | headline | subhead | caption | badge */
-  role?: "kicker" | "headline" | "subhead" | "caption" | "badge";
+  /** text kind: kicker | headline | subhead | caption | badge | sticker */
+  role?: "kicker" | "headline" | "subhead" | "caption" | "badge" | "sticker";
   x: number;
   y: number;
   w?: number; // shapes/images; text auto-sizes from style

@@ -2,14 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Toolbar from "@/components/Toolbar";
-import Sidebar from "@/components/Sidebar";
 import Canvas from "@/components/Canvas";
-import Inspector from "@/components/Inspector";
 import ExportDialog from "@/components/ExportDialog";
 import { useProject } from "@/components/useProject";
+import TemplateGallery from "@/components/TemplateGallery";
+import ToolDock, { type ToolId } from "@/components/ToolDock";
+import { STICKER_DEFAULT_SIZE } from "@/lib/stickers";
 import { canvasSize, devicesWithLandscape, getDevice } from "@/lib/devices";
+import type { DeckTemplate } from "@/lib/templates";
 import { defaultDeckConfig, makeDeck, makeTextElement, newId, starterScreen } from "@/lib/factory";
 import { HEADLINE_FORMULAS } from "@/lib/headlines";
+import { instantiateTemplate } from "@/lib/templates";
 import type { Deck, EditorMode, PlatformId, Screen, ScreenElement, UploadedAsset } from "@/lib/types";
 
 export default function Page() {
@@ -19,10 +22,54 @@ export default function Page() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [locale, setLocale] = useState("en-US");
   const [showExport, setShowExport] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
+  // start with the dock closed — full-width canvas showing every connected screen
+  const [tool, setTool] = useState<ToolId | null>(null);
 
   useEffect(() => {
     if (state) setLocale(state.fallbackLocale);
   }, [state?.revision === 0]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // derived values hoisted above early returns so hooks stay unconditional
+  const deck = state?.decks.find((d) => d.platform === platform) ?? null;
+  const screen: Screen | null = deck?.screens[Math.min(screenIndex, deck.screens.length - 1)] ?? null;
+  const deckDevice = deck ? getDevice(deck.deviceId) : null;
+
+  // keyboard: arrows nudge the selection (Shift = coarse), Delete removes
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (!selectedId || !deck || !screen) return;
+      const el = screen.elements.find((x) => x.id === selectedId);
+      if (!el) return;
+      const step = e.shiftKey ? 40 : 8;
+      const move = (x: number, y: number) =>
+        patchScreen((sc) => ({
+          ...sc,
+          elements: sc.elements.map((x2) => (x2.id === selectedId ? { ...x2, x, y } : x2)),
+        }));
+      if (e.key === "ArrowLeft") {
+        move(el.x - step, el.y);
+        e.preventDefault();
+      } else if (e.key === "ArrowRight") {
+        move(el.x + step, el.y);
+        e.preventDefault();
+      } else if (e.key === "ArrowUp") {
+        move(el.x, el.y - step);
+        e.preventDefault();
+      } else if (e.key === "ArrowDown") {
+        move(el.x, el.y + step);
+        e.preventDefault();
+      } else if (e.key === "Delete" || e.key === "Backspace") {
+        patchScreen((sc) => ({ ...sc, elements: sc.elements.filter((x2) => x2.id !== selectedId) }));
+        setSelectedId(null);
+        e.preventDefault();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   if (status === "loading") return <main style={{ padding: 40 }}>Loading project…</main>;
   if (status === "error")
@@ -33,10 +80,6 @@ export default function Page() {
       </main>
     );
   if (!state) return null;
-
-  const deck = state.decks.find((d) => d.platform === platform) ?? null;
-  const screen: Screen | null = deck?.screens[Math.min(screenIndex, deck.screens.length - 1)] ?? null;
-  const deckDevice = deck ? getDevice(deck.deviceId) : null;
 
   function createDeck(p: PlatformId) {
     const cfg = defaultDeckConfig(p);
@@ -102,9 +145,23 @@ export default function Page() {
     },
     onMode: (mode: EditorMode) => update((s) => ({ ...s, mode })),
     onLocale: setLocale,
+    onTemplates: () => setShowTemplates(true),
     onExport: () => setShowExport(true),
     onSave: () => void save(),
   };
+
+  function useTemplate(t: DeckTemplate) {
+    const d = instantiateTemplate(t);
+    update((s) => ({
+      ...s,
+      defaultStyleId: t.styleId,
+      decks: [...s.decks.filter((x) => x.platform !== t.platform), d],
+    }));
+    setPlatform(t.platform);
+    setScreenIndex(0);
+    setSelectedId(null);
+    setShowTemplates(false);
+  }
 
   const screenHandlers = {
     onSelect: setSelectedId,
@@ -112,6 +169,12 @@ export default function Page() {
       patchScreen((sc) => ({
         ...sc,
         elements: sc.elements.map((el) => (el.id === elId ? { ...el, x, y } : el)),
+      }));
+    },
+    onBindAsset: (elId: string, assetId: string) => {
+      patchScreen((sc) => ({
+        ...sc,
+        elements: sc.elements.map((el) => (el.id === elId ? { ...el, screenshotId: assetId } : el)),
       }));
     },
     onUpdateScreen: (patch: Partial<Screen>) => patchScreen((sc) => ({ ...sc, ...patch })),
@@ -129,15 +192,16 @@ export default function Page() {
     onAddElement: (kind: ScreenElement["kind"]) => {
       if (!deck || !screen) return;
       const { w: cw } = canvasSize(deck.deviceId, deck.orientation);
+      const off = screenIndex * cw; // strip coords: anchor to the edited screen's panel
       let el: ScreenElement;
       if (kind === "text") {
-        el = makeTextElement("subhead", "New text", Math.round(cw * 0.1), Math.round(cw * 0.5), cw, "#inherit");
+        el = makeTextElement("subhead", "New text", Math.round(cw * 0.1) + off, Math.round(cw * 0.5), cw, "#inherit");
         el.id = newId("text");
       } else if (kind === "device") {
         const fw = Math.round(cw * 0.45);
-        el = { id: newId("device"), kind: "device", x: Math.round(cw * 0.55), y: Math.round(cw * 0.45), w: fw, h: Math.round(fw * 2.05), z: 2, deviceId: deck.deviceId };
+        el = { id: newId("device"), kind: "device", x: Math.round(cw * 0.55) + off, y: Math.round(cw * 0.45), w: fw, h: Math.round(fw * 2.05), z: 2, deviceId: deck.deviceId };
       } else {
-        el = { id: newId("shape"), kind: "shape", x: Math.round(cw * 0.6), y: Math.round(cw * 0.1), w: Math.round(cw * 0.25), h: Math.round(cw * 0.25), z: 0, shape: "ellipse", opacity: 0.5 };
+        el = { id: newId("shape"), kind: "shape", x: Math.round(cw * 0.6) + off, y: Math.round(cw * 0.1), w: Math.round(cw * 0.25), h: Math.round(cw * 0.25), z: 0, shape: "ellipse", opacity: 0.5 };
       }
       patchScreen((sc) => ({ ...sc, elements: [...sc.elements, el] }));
       setSelectedId(el.id);
@@ -147,28 +211,74 @@ export default function Page() {
       if (selectedId === id) setSelectedId(null);
     },
     onAddAsset: (asset: UploadedAsset) => update((s) => ({ ...s, assets: [...s.assets.filter((a) => a.id !== asset.id), asset] })),
+    onAddSticker: (emoji: string) => {
+      if (!deck || !screen) return;
+      const { w: cw } = canvasSize(deck.deviceId, deck.orientation);
+      const off = screenIndex * cw;
+      const el: ScreenElement = {
+        id: newId("sticker"),
+        kind: "text",
+        role: "sticker",
+        x: off + Math.round(cw * 0.4),
+        y: Math.round(cw * 0.5),
+        z: 3,
+        text: emoji,
+        align: "center",
+        color: "#inherit",
+        fontSize: STICKER_DEFAULT_SIZE,
+      };
+      patchScreen((sc) => ({ ...sc, elements: [...sc.elements, el] }));
+      setSelectedId(el.id);
+    },
+    onAddShape: (shape: "rect" | "ellipse" | "ring") => {
+      if (!deck || !screen) return;
+      const { w: cw } = canvasSize(deck.deviceId, deck.orientation);
+      const off = screenIndex * cw;
+      const el: ScreenElement = {
+        id: newId("shape"),
+        kind: "shape",
+        shape,
+        x: off + Math.round(cw * 0.32),
+        y: Math.round(cw * 0.35),
+        w: Math.round(cw * 0.36),
+        h: Math.round(cw * 0.36),
+        z: 0,
+        opacity: 0.5,
+      };
+      patchScreen((sc) => ({ ...sc, elements: [...sc.elements, el] }));
+      setSelectedId(el.id);
+    },
     onAdd: () => {
       if (!deck) return;
       const seed = HEADLINE_FORMULAS[deck.screens.length % HEADLINE_FORMULAS.length];
-      patchDeck((d) => ({ ...d, screens: [...d.screens, starterScreen(d, { headline: seed.example, caption: "Say the benefit, not the feature." })] }));
+      patchDeck((d) => ({ ...d, screens: [...d.screens, starterScreen(d, { headline: seed.example, caption: "Say the benefit, not the feature." }, d.screens.length)] }));
       setScreenIndex(deck.screens.length);
     },
     onReorder: (from: number, to: number) => {
       patchDeck((d) => {
-        const screens = [...d.screens];
-        const [moved] = screens.splice(from, 1);
-        screens.splice(to, 0, moved);
+        const { w: cw } = canvasSize(d.deviceId, d.orientation);
+        // order[newIndex] = oldIndex; re-anchor strip coords to new positions
+        const order = d.screens.map((_, i) => i);
+        const [moved] = order.splice(from, 1);
+        order.splice(to, 0, moved);
+        const screens = order.map((oldIndex, newIndex) => {
+          const sc = d.screens[oldIndex];
+          const delta = (newIndex - oldIndex) * cw;
+          if (!delta) return sc;
+          return { ...sc, elements: sc.elements.map((el) => ({ ...el, x: el.x + delta })) };
+        });
         return { ...d, screens };
       });
       setScreenIndex(to);
     },
     onDuplicate: (index: number) => {
       patchDeck((d) => {
+        const { w: cw } = canvasSize(d.deviceId, d.orientation);
         const src = d.screens[index];
         const copy: Screen = {
           ...structuredClone(src),
           id: newId("screen"),
-          elements: src.elements.map((el) => ({ ...structuredClone(el), id: newId(el.kind) })),
+          elements: src.elements.map((el) => ({ ...structuredClone(el), id: newId(el.kind), x: el.x + cw })),
         };
         const screens = [...d.screens];
         screens.splice(index + 1, 0, copy);
@@ -230,19 +340,37 @@ export default function Page() {
 
       {deck && screen ? (
         <div style={{ display: "flex", gap: 10, flex: 1, minHeight: 0 }}>
-          <Sidebar
+          <ToolDock
+            tool={tool}
+            onTool={setTool}
             deck={deck}
             state={state}
             locale={locale}
             screenIndex={screenIndex}
-            onSelect={(i) => {
+            selectedId={selectedId}
+            screen={screen}
+            onSelect={setSelectedId}
+            onScreenSelect={(i) => {
               setScreenIndex(i);
               setSelectedId(null);
             }}
-            onReorder={screenHandlers.onReorder}
-            onAdd={screenHandlers.onAdd}
-            onDuplicate={screenHandlers.onDuplicate}
-            onDelete={screenHandlers.onDelete}
+            onScreenAdd={screenHandlers.onAdd}
+            onScreenReorder={screenHandlers.onReorder}
+            onScreenDuplicate={screenHandlers.onDuplicate}
+            onScreenDelete={screenHandlers.onDelete}
+            onUpdateScreen={screenHandlers.onUpdateScreen}
+            onUpdateElement={screenHandlers.onUpdateElement}
+            onAddElement={screenHandlers.onAddElement}
+            onAddDeviceFrame={() => screenHandlers.onAddElement("device")}
+            onAddShape={screenHandlers.onAddShape}
+            onAddSticker={screenHandlers.onAddSticker}
+            onDeleteElement={screenHandlers.onDeleteElement}
+            onAddAsset={screenHandlers.onAddAsset}
+            onBindToSelection={(assetId) => {
+              if (selectedId) screenHandlers.onBindAsset(selectedId, assetId);
+            }}
+            onBindDevice={screenHandlers.onBindAsset}
+            onStyle={handlers.onStyle}
           />
           <div className="panel" style={{ flex: 1, overflow: "auto", padding: 16 }}>
             <Canvas
@@ -253,6 +381,8 @@ export default function Page() {
               selectedId={selectedId}
               onSelect={screenHandlers.onSelect}
               onMoveElement={screenHandlers.onMoveElement}
+              onBindAsset={screenHandlers.onBindAsset}
+              onAddAsset={screenHandlers.onAddAsset}
             />
             <p style={{ textAlign: "center", color: "var(--text-dim)", fontSize: 12 }}>
               {state.mode === "connected"
@@ -260,14 +390,6 @@ export default function Page() {
                 : "Isolated mode — elements are clipped to their own screen on export."}
             </p>
           </div>
-          <Inspector
-            deck={deck}
-            state={state}
-            locale={locale}
-            screen={screen}
-            selectedId={selectedId}
-            {...screenHandlers}
-          />
         </div>
       ) : (
         <div className="panel" style={{ flex: 1, display: "grid", placeItems: "center" }}>
@@ -281,6 +403,7 @@ export default function Page() {
       )}
 
       {showExport && <ExportDialog state={state} onClose={() => setShowExport(false)} />}
+      {showTemplates && <TemplateGallery onPick={useTemplate} onClose={() => setShowTemplates(false)} />}
     </main>
   );
 }

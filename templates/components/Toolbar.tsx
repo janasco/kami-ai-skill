@@ -16,6 +16,7 @@ interface Props {
   onStyle: (styleId: string) => void;
   onMode: (m: EditorMode) => void;
   onLocale: (l: string) => void;
+  onTemplates: () => void;
   onExport: () => void;
   onSave: () => void;
   dirty: boolean;
@@ -23,7 +24,7 @@ interface Props {
 }
 
 export default function Toolbar({
-  state, platform, deviceId, mode, locale, onPlatform, onDevice, onStyle, onMode, onLocale, onExport, onSave, dirty, status,
+  state, platform, deviceId, mode, locale, onPlatform, onDevice, onStyle, onMode, onLocale, onTemplates, onExport, onSave, dirty, status,
 }: Props) {
   const devices = devicesForPlatform(platform);
   return (
@@ -65,6 +66,8 @@ export default function Toolbar({
       </select>
 
       <div style={{ flex: 1 }} />
+
+      <button onClick={onTemplates} title="Start from a ready-made deck design">✦ Templates</button>
 
       <span style={{ fontSize: 12, color: dirty ? "var(--danger)" : "var(--text-dim)" }}>
         {status === "conflict" ? "⚠ conflict" : dirty ? "unsaved…" : "saved"}
